@@ -289,7 +289,7 @@ export default function App() {
   }, [isEditingReflection, currentInsightData]);
 
   const callGeminiAPI = useCallback(async (payload) => {
-      const apiKey = userSettings.customApiKey || "AIzaSyAbbaNWeKUygcSxTZQr5yktnDjOyh-ms9Y";
+      const apiKey = userSettings.customApiKey || import.meta.env.VITE_GEMINI_API_KEY;
 
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
       try { const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!response.ok) { const err = await response.json(); throw new Error(err.error.message); } const result = await response.json(); return result.candidates?.[0]?.content?.parts?.[0]?.text; } catch (error) { console.error("Gemini API Error:", error); throw error; }
