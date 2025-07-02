@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Feather, Sparkles, Edit3, CheckCircle, Compass, ChevronsRight, Home, Calendar, Star, Settings, Globe, Anchor, Zap, Eye, EyeOff, Trash2, Moon, Sun, Send } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, deleteUser } from 'firebase/auth';
@@ -7,12 +7,30 @@ import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, getDoc
 import { motion, AnimatePresence } from 'framer-motion';
 import Lottie from 'lottie-react';
 
-// --- IMPORTANT: Placeholder for your Lottie animation JSON ---
+// --- Your Local Imports ---
 import appIconAnimation from './app-icon.json';
-import { wisdomSources } from './wisdomSources'; // Assuming src/wisdomSources.js is in the same directory as App.js
+import { wisdomSources } from './wisdomSources';
+
+// --- NEW: Import all your Lottie animation files ---
+// Make sure the paths are correct for your project structure.
+import angryAnimation from './animations/angry.json';
+import anxiousAnimation from './animations/anxious.json';
+import confusedAnimation from './animations/confused.json';
+import happyAnimation from './animations/happy.json';
+import hopefulAnimation from './animations/hopeful.json';
+import inspiredAnimation from './animations/inspired.json';
+import joyfulAnimation from './animations/joyful.json';
+import lovedAnimation from './animations/loved.json';
+import overwhelmedAnimation from './animations/overwhelmed.json';
+import peacefulAnimation from './animations/peaceful.json';
+import relievedAnimation from './animations/relieved.json';
+import sadAnimation from './animations/sad.json';
+import smileAnimation from './animations/smile.json';
+import surprisedAnimation from './animations/surprised.json';
+import worriedAnimation from './animations/worried.json';
 
 
-// --- IMPORTANT: PASTE YOUR FIREBASE CONFIG HERE ---
+// --- Your Firebase Config ---
 const firebaseConfig = {
     apiKey: "AIzaSyCELcyY_Ctoz8C7vLXJYPKuB7JHuTj0HCU",
     authDomain: "mindfulseed-8982a.firebaseapp.com",
@@ -59,7 +77,7 @@ function RotatingSubtitle() {
     );
 
 }
-// --- MODIFICATION: Add your default Gemini API key here ---
+// --- Your Gemini API Key ---
 const DEFAULT_GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 // Initialize Firebase
@@ -87,9 +105,86 @@ const LoginScreen = ({ onSignIn, error }) => (
     </div>
 );
 
+// --- NEW COMPONENT: Tooltip for long-press ---
+const Tooltip = ({ text, x, y, visible }) => (
+    <AnimatePresence>
+        {visible && (
+            <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.2 }}
+                className="fixed p-3 bg-gray-800 text-white text-sm rounded-lg shadow-xl z-50 max-w-xs pointer-events-none"
+                style={{
+                    left: x,
+                    top: y,
+                    transform: 'translate(-50%, -110%)', // Position above the cursor
+                }}
+            >
+                {text}
+            </motion.div>
+        )}
+    </AnimatePresence>
+);
+
+// --- MODIFIED COMPONENT: EmotionChip to show live animation by default ---
+const EmotionChip = ({ chip, onSelect, onLongPressStart, onLongPressEnd, itemVariants }) => {
+    return (
+        <motion.button
+            key={chip.text}
+            onClick={() => onSelect(`I'm feeling ${chip.text.toLowerCase()}`)}
+            onMouseDown={(e) => onLongPressStart(e, chip.description)}
+            onMouseUp={onLongPressEnd}
+            onMouseLeave={onLongPressEnd}
+            onTouchStart={(e) => onLongPressStart(e, chip.description)}
+            onTouchEnd={onLongPressEnd}
+            className="px-4 py-2 bg-emerald-100/50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-200 rounded-full text-sm flex items-center gap-2 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-400/30 dark:hover:shadow-emerald-500/40"
+            variants={itemVariants}
+            whileTap={{ scale: 0.95 }}
+            whileHover={{ y: -2 }}
+        >
+            <div className="w-8 h-8 flex items-center justify-center">
+                <Lottie animationData={chip.animationData} loop={true} autoplay={true} />
+            </div>
+            {chip.text}
+        </motion.button>
+    );
+};
+
+
 const HomeView = ({ user, onFocusSelect, isLoading, recentEntries, onInsightSelect }) => {
     const [mood, setMood] = useState('');
     const [placeholder, setPlaceholder] = useState("I'm feeling...");
+    const [tooltip, setTooltip] = useState({ visible: false, text: '', x: 0, y: 0 });
+    const longPressTimer = useRef();
+    // --- NEW: State to hold the 4 random emotions ---
+    const [randomChips, setRandomChips] = useState([]);
+
+    // --- NEW: Full list of all possible emotions ---
+    const allEmotionChips = React.useMemo(() => [
+        { text: 'Angry', description: 'Feeling or showing strong annoyance, displeasure, or hostility.', animationData: angryAnimation },
+        { text: 'Anxious', description: 'Feeling worry, nervousness, or unease about an imminent event or something with an uncertain outcome.', animationData: anxiousAnimation },
+        { text: 'Confused', description: 'Unable to think clearly or to understand something.', animationData: confusedAnimation },
+        { text: 'Happy', description: 'Feeling or showing pleasure or contentment.', animationData: happyAnimation },
+        { text: 'Hopeful', description: 'Feeling or inspiring optimism about a future event.', animationData: hopefulAnimation },
+        { text: 'Inspired', description: 'Feeling mentally stimulated to do or feel something, especially to do something creative.', animationData: inspiredAnimation },
+        { text: 'Joyful', description: 'Feeling, expressing, or causing great pleasure and happiness.', animationData: joyfulAnimation },
+        { text: 'Loved', description: 'Feeling deeply cared for and cherished.', animationData: lovedAnimation },
+        { text: 'Overwhelmed', description: 'Feeling buried by stress or emotion, making it difficult to think or function.', animationData: overwhelmedAnimation },
+        { text: 'Peaceful', description: 'A state of peace, tranquility, and freedom from agitation or disturbance.', animationData: peacefulAnimation },
+        { text: 'Relieved', description: 'Feeling reassurance and relaxation following release from anxiety or distress.', animationData: relievedAnimation },
+        { text: 'Sad', description: 'Feeling or showing sorrow; unhappy.', animationData: sadAnimation },
+        { text: 'Smile', description: 'A pleased, kind, or amused facial expression.', animationData: smileAnimation },
+        { text: 'Surprised', description: 'Feeling mild astonishment or shock.', animationData: surprisedAnimation },
+        { text: 'Worried', description: 'Feeling anxious or troubled about actual or potential problems.', animationData: worriedAnimation }
+    ], []);
+
+    // --- NEW: useEffect to select 4 random chips on component mount ---
+    useEffect(() => {
+        const shuffled = [...allEmotionChips].sort(() => 0.5 - Math.random());
+        setRandomChips(shuffled.slice(0, 4));
+    }, [allEmotionChips]);
+
 
     const placeholders = [
         "I'm feeling anxious...",
@@ -121,12 +216,19 @@ const HomeView = ({ user, onFocusSelect, isLoading, recentEntries, onInsightSele
         }
     };
 
-    const emotionChips = [
-        { emoji: '😔', text: 'Anxious' },
-        { emoji: '😵‍💫', text: 'Overwhelmed' },
-        { emoji: '💔', text: 'Lonely' },
-        { emoji: '🧘', text: 'Calm' },
-    ];
+    const handlePressStart = (e, description) => {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = setTimeout(() => {
+            const clientX = e.clientX || e.touches[0].clientX;
+            const clientY = e.clientY || e.touches[0].clientY;
+            setTooltip({ visible: true, text: description, x: clientX, y: clientY });
+        }, 500);
+    };
+
+    const handlePressEnd = () => {
+        clearTimeout(longPressTimer.current);
+        setTooltip({ visible: false, text: '', x: 0, y: 0 });
+    };
 
     const containerVariants = {
         hidden: { opacity: 0 },
@@ -148,117 +250,118 @@ const HomeView = ({ user, onFocusSelect, isLoading, recentEntries, onInsightSele
     };
 
     return (
-        <motion.div
-            className="w-full max-w-2xl mx-auto p-6 md:p-8 flex-grow space-y-8"
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-        >
-            {/* 1. Greeting Header */}
+        <>
+            <Tooltip text={tooltip.text} x={tooltip.x} y={tooltip.y} visible={tooltip.visible} />
             <motion.div
-                className="text-center"
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.2, type: 'spring', stiffness: 100 }}
+                className="w-full max-w-2xl mx-auto p-6 md:p-8 flex-grow space-y-8"
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
             >
-                <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
-                    {getGreeting()}, {user?.displayName?.split(' ')[0] || 'friend'}{' '}
-                    <motion.span
-                        animate={{ rotate: [0, 20, 0] }}
-                        transition={{
-                            duration: 0.8,
-                            ease: 'easeInOut',
-                            repeat: Infinity,
-                            repeatType: 'mirror',
-                        }}
-                        className="inline-block"
-                    >
-                        👋
-                    </motion.span>
-                </h1>
-                <motion.p
-                    className="text-gray-500 dark:text-gray-400 mt-2"
-                    initial={{ opacity: 0, y: -10 }}
+                {/* Greeting Header */}
+                <motion.div
+                    className="text-center"
+                    initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, delay: 0.4 }}
+                    transition={{ duration: 0.6, delay: 0.2, type: 'spring', stiffness: 100 }}
                 >
-                    What’s weighing on your heart today?
-                </motion.p>
-            </motion.div>
-
-            {/* 2. Mood Input Section */}
-            <motion.div
-                variants={itemVariants}
-                className="bg-white/60 dark:bg-gray-800/50 backdrop-blur-xl p-6 rounded-2xl shadow-lg transition-all duration-300"
-            >
-                <form onSubmit={handleMoodSubmit}>
-                    <div className="relative">
-                        <textarea
-                            value={mood}
-                            onChange={(e) => setMood(e.target.value)}
-                            className="w-full p-4 pr-12 bg-gray-100/50 dark:bg-gray-700/50 rounded-xl border-2 border-transparent focus:border-emerald-500 focus:ring-0 transition-all"
-                            rows="3"
-                            placeholder={placeholder}
-                        />
-                        <motion.button
-                            type="submit"
-                            disabled={!mood.trim() || isLoading}
-                            className="absolute right-3 top-3 p-2 bg-emerald-500 text-white rounded-full hover:bg-emerald-600 disabled:bg-emerald-300 transition-all"
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
+                    <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
+                        {getGreeting()}, {user?.displayName?.split(' ')[0] || 'friend'}{' '}
+                        <motion.span
+                            animate={{ rotate: [0, 20, 0] }}
+                            transition={{
+                                duration: 0.8,
+                                ease: 'easeInOut',
+                                repeat: Infinity,
+                                repeatType: 'mirror',
+                            }}
+                            className="inline-block"
                         >
-                            {isLoading ? <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <Send size={20} />}
-                        </motion.button>
+                            👋
+                        </motion.span>
+                    </h1>
+                    <motion.p
+                        className="text-gray-500 dark:text-gray-400 mt-2"
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.6, delay: 0.4 }}
+                    >
+                        What’s weighing on your heart today?
+                    </motion.p>
+                </motion.div>
+
+                {/* Mood Input Section */}
+                <motion.div
+                    variants={itemVariants}
+                    className="bg-white/60 dark:bg-gray-800/50 backdrop-blur-xl p-6 rounded-2xl shadow-lg transition-all duration-300"
+                >
+                    <form onSubmit={handleMoodSubmit}>
+                        <div className="relative">
+                            <textarea
+                                value={mood}
+                                onChange={(e) => setMood(e.target.value)}
+                                className="w-full p-4 pr-12 bg-gray-100/50 dark:bg-gray-700/50 rounded-xl border-2 border-transparent focus:border-emerald-500 focus:ring-0 transition-all"
+                                rows="3"
+                                placeholder={placeholder}
+                            />
+                            <motion.button
+                                type="submit"
+                                disabled={!mood.trim() || isLoading}
+                                className="absolute right-3 top-3 p-2 bg-emerald-500 text-white rounded-full hover:bg-emerald-600 disabled:bg-emerald-300 transition-all"
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                            >
+                                {isLoading ? <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <Send size={20} />}
+                            </motion.button>
+                        </div>
+                    </form>
+                    <div className="flex flex-wrap gap-3 mt-4">
+                        {randomChips.map((chip) => (
+                            <EmotionChip
+                                key={chip.text}
+                                chip={chip}
+                                onSelect={onFocusSelect}
+                                onLongPressStart={handlePressStart}
+                                onLongPressEnd={handlePressEnd}
+                                itemVariants={itemVariants}
+                            />
+                        ))}
                     </div>
-                </form>
-                <div className="flex flex-wrap gap-2 mt-4">
-                    {emotionChips.map((chip) => (
-                        <motion.button
-                            key={chip.text}
-                            onClick={() => onFocusSelect(`I'm feeling ${chip.text.toLowerCase()}`)}
-                            className="px-3 py-1.5 bg-emerald-100/50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-200 rounded-full text-sm hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-all"
-                            variants={itemVariants}
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.95 }}
-                        >
-                            {chip.emoji} {chip.text}
-                        </motion.button>
-                    ))}
-                </div>
-            </motion.div>
+                </motion.div>
 
-            {/* 3. Seed of the Day */}
-            <motion.div variants={itemVariants} className="glass-card-flat p-6">
-                <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-2">A thought for your journey…</h3>
-                <blockquote className="text-gray-700 dark:text-gray-200 italic">
-                    "The quieter you become, the more you are able to hear."
-                    <footer className="mt-2 text-xs text-gray-500 not-italic">— Ram Dass</footer>
-                </blockquote>
-            </motion.div>
+                {/* Seed of the Day */}
+                <motion.div variants={itemVariants} className="glass-card-flat p-6">
+                    <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-2">A thought for your journey…</h3>
+                    <blockquote className="text-gray-700 dark:text-gray-200 italic">
+                        "The quieter you become, the more you are able to hear."
+                        <footer className="mt-2 text-xs text-gray-500 not-italic">— Ram Dass</footer>
+                    </blockquote>
+                </motion.div>
 
-            {/* 4. Recent Reflections Carousel */}
-            <motion.div variants={itemVariants}>
-                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Recent Reflections</h3>
-                <div className="flex gap-4 overflow-x-auto pb-4 -mx-6 px-6">
-                    {recentEntries.length > 0 ? recentEntries.map((entry, i) => (
-                        <motion.div
-                            key={entry.id}
-                            className="flex-shrink-0 w-64 bg-white/50 dark:bg-gray-800/40 backdrop-blur-lg rounded-xl p-4 shadow-md cursor-pointer hover:shadow-xl transition-shadow"
-                            onClick={() => onInsightSelect(entry)}
-                            initial={{ opacity: 0, x: 50 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: i * 0.1 }}
-                        >
-                            <p className="text-xs text-gray-500 dark:text-gray-400">{new Date(entry.id).toLocaleDateString()}</p>
-                            <p className="font-semibold text-gray-700 dark:text-gray-200 mt-1 truncate">"{entry.insight.quote}"</p>
-                            <p className="text-xs bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full inline-block mt-3 capitalize">{entry.focus}</p>
-                        </motion.div>
-                    )) : (
-                        <p className="text-gray-500 dark:text-gray-400">Your recent insights will appear here.</p>
-                    )}
-                </div>
+                {/* Recent Reflections Carousel */}
+                <motion.div variants={itemVariants}>
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Recent Reflections</h3>
+                    <div className="flex gap-4 overflow-x-auto pb-4 -mx-6 px-6">
+                        {recentEntries.length > 0 ? recentEntries.map((entry, i) => (
+                            <motion.div
+                                key={entry.id}
+                                className="flex-shrink-0 w-64 bg-white/50 dark:bg-gray-800/40 backdrop-blur-lg rounded-xl p-4 shadow-md cursor-pointer hover:shadow-xl transition-shadow"
+                                onClick={() => onInsightSelect(entry)}
+                                initial={{ opacity: 0, x: 50 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: i * 0.1 }}
+                            >
+                                <p className="text-xs text-gray-500 dark:text-gray-400">{new Date(entry.id).toLocaleDateString()}</p>
+                                <p className="font-semibold text-gray-700 dark:text-gray-200 mt-1 truncate">"{entry.insight.quote}"</p>
+                                <p className="text-xs bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full inline-block mt-3 capitalize">{entry.focus}</p>
+                            </motion.div>
+                        )) : (
+                            <p className="text-gray-500 dark:text-gray-400">Your recent insights will appear here.</p>
+                        )}
+                    </div>
+                </motion.div>
             </motion.div>
-        </motion.div>
+        </>
     );
 };
 
@@ -710,7 +813,10 @@ Input: "${userInput}"`;
 
         const payload = getInsightPrompt(focus, learningSummary, repetitionContext, recentSources);
         const resultText = await callGeminiAPI(payload);
-        if (!resultText) throw new Error("API returned no content.");
+        // --- ERROR FIX: Add a check before parsing JSON ---
+        if (!resultText || typeof resultText !== 'string') {
+            throw new Error("API returned an invalid or empty insight response.");
+        }
         const newInsight = JSON.parse(resultText);
         const iconList = ['🌱', '�', '🌸', '💧', '☀️', '⛰️', '⭐', '💎', '🧭', '🕊️'];
         newInsight.icon = iconList[Math.floor(Math.random() * iconList.length)];
@@ -749,6 +855,10 @@ Input: "${userInput}"`;
             // Step 1: Validate input using Gemini
             const validationPayload = getValidationPrompt(trimmedFocus);
             const validationJson = await callGeminiAPI(validationPayload);
+            // --- ERROR FIX: Add a check before parsing JSON ---
+            if (!validationJson || typeof validationJson !== 'string') {
+                throw new Error("API returned an invalid or empty validation response.");
+            }
             const validationResponse = JSON.parse(validationJson);
             const { classification, greyAreaMessage } = validationResponse;
 
@@ -780,7 +890,7 @@ Input: "${userInput}"`;
                 });
             }
         } catch (e) {
-            console.error("Error fetching new insight:", e);
+            console.error("Error in fetchNewInsight:", e);
             setModalContent({
                 isOpen: true,
                 title: "An Error Occurred",
