@@ -1,18 +1,17 @@
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Feather, Sparkles, Edit3, CheckCircle, Compass, ChevronsRight, Home, Calendar, Star, Settings, Globe, Anchor, Zap, Eye, EyeOff, Trash2, Moon, Sun, Send } from 'lucide-react';
+import { Feather, Sparkles, Edit3, CheckCircle, Compass, ChevronsRight, Home, Calendar, Star, Settings, Globe, Anchor, Zap, Eye, EyeOff, Trash2, Moon, Sun, Send, HelpCircle, RefreshCw } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, deleteUser } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, getDocs, deleteDoc as firestoreDeleteDoc } from 'firebase/firestore';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import Lottie from 'lottie-react';
 
 // --- Your Local Imports ---
 import appIconAnimation from './app-icon.json';
 import { wisdomSources } from './wisdomSources';
 
-// --- NEW: Import all your Lottie animation files ---
-// Make sure the paths are correct for your project structure.
+// --- Import all your Lottie animation files ---
 import angryAnimation from './animations/angry.json';
 import anxiousAnimation from './animations/anxious.json';
 import confusedAnimation from './animations/confused.json';
@@ -105,7 +104,6 @@ const LoginScreen = ({ onSignIn, error }) => (
     </div>
 );
 
-// --- NEW COMPONENT: Tooltip for long-press ---
 const Tooltip = ({ text, x, y, visible }) => (
     <AnimatePresence>
         {visible && (
@@ -118,7 +116,7 @@ const Tooltip = ({ text, x, y, visible }) => (
                 style={{
                     left: x,
                     top: y,
-                    transform: 'translate(-50%, -110%)', // Position above the cursor
+                    transform: 'translate(-50%, -110%)',
                 }}
             >
                 {text}
@@ -127,7 +125,6 @@ const Tooltip = ({ text, x, y, visible }) => (
     </AnimatePresence>
 );
 
-// --- MODIFIED COMPONENT: EmotionChip to show live animation by default ---
 const EmotionChip = ({ chip, onSelect, onLongPressStart, onLongPressEnd, itemVariants }) => {
     return (
         <motion.button
@@ -151,35 +148,133 @@ const EmotionChip = ({ chip, onSelect, onLongPressStart, onLongPressEnd, itemVar
     );
 };
 
+const LoadingWisdomModal = ({ isOpen, message }) => (
+    <AnimatePresence>
+        {isOpen && (
+            <motion.div
+                className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+            >
+                <motion.div
+                    key={message}
+                    className="bg-white/80 dark:bg-gray-800/80 rounded-2xl shadow-xl p-6 text-center"
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                >
+                    <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">
+                        {message}
+                    </p>
+                </motion.div>
+            </motion.div>
+        )}
+    </AnimatePresence>
+);
 
-const HomeView = ({ user, onFocusSelect, isLoading, recentEntries, onInsightSelect }) => {
+const TodaysReflections = ({ reflections, onInsightSelect }) => {
+    const scrollRef = useRef(null);    
+    const { scrollXProgress } = useScroll({ container: scrollRef, layoutEffect: false });
+
+    if (reflections.length === 0) {
+        return (
+             <div className="text-center py-10 px-6">
+                <p className="text-gray-500 dark:text-gray-400">No seeds planted yet today 🌱</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">What's on your mind?</p>
+            </div>
+        )
+    }
+
+    const moodAuras = {
+        'peaceful': 'shadow-cyan-400/30',
+        'anxious': 'shadow-orange-400/30',
+        'happy': 'shadow-yellow-400/30',
+        'joyful': 'shadow-amber-400/30',
+        'sad': 'shadow-blue-500/30',
+        'loved': 'shadow-pink-400/30',
+        'overwhelmed': 'shadow-purple-400/30',
+        'hopeful': 'shadow-green-400/30',
+        'inspired': 'shadow-teal-400/30',
+        'default': 'shadow-indigo-400/20'
+    };
+
+    const getAuraColor = (focus) => {
+        const focusLower = focus.toLowerCase();
+        for (const mood in moodAuras) {
+            if (focusLower.includes(mood)) {
+                return moodAuras[mood];
+            }
+        }
+        return moodAuras.default;
+    };
+    
+    return (
+        <div ref={scrollRef} className="flex gap-6 overflow-x-auto p-2 -mx-6 px-6 snap-x snap-mandatory" style={{ perspective: "1000px", scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            {reflections.map((entry, i) => {
+                const aura = getAuraColor(entry.focus);
+                return (
+                    <motion.div
+                        key={entry.id}
+                        className="flex-shrink-0 w-72 h-48 snap-center cursor-pointer group"
+                        onClick={() => onInsightSelect(entry)}
+                        style={{
+                            transformStyle: "preserve-3d"
+                        }}
+                        initial={{ opacity: 0, x: 100, rotateY: -30 }}
+                        animate={{ opacity: 1, x: 0, rotateY: 0 }}
+                        transition={{ duration: 0.8, delay: i * 0.15, ease: [0.16, 1, 0.3, 1] }}
+                        whileHover={{ y: -8, rotateY: 5 }}
+                    >
+                        <div className={`h-full w-full bg-white/60 dark:bg-gray-800/50 backdrop-blur-xl rounded-2xl p-5 shadow-lg transition-all duration-300 border border-white/30 dark:border-gray-700/60 flex flex-col justify-between group-hover:shadow-2xl ${aura}`}>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 self-end">{new Date(entry.id).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                            
+                            <p className="font-serif text-lg text-gray-800 dark:text-gray-100 line-clamp-3">"{entry.insight.quote}"</p>
+                            
+                            <p className={`text-xs bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-3 py-1 rounded-full inline-block capitalize self-start`}>{entry.focus}</p>
+                        </div>
+                    </motion.div>
+                )
+            })}
+        </div>
+    )
+}
+
+
+const HomeView = ({ user, onFocusSelect, isLoading, loadingMessage, allEntries, onInsightSelect, seedOfTheDay, isLoadingSeed, onRefreshSeed }) => {
     const [mood, setMood] = useState('');
     const [placeholder, setPlaceholder] = useState("I'm feeling...");
     const [tooltip, setTooltip] = useState({ visible: false, text: '', x: 0, y: 0 });
     const longPressTimer = useRef();
-    // --- NEW: State to hold the 4 random emotions ---
     const [randomChips, setRandomChips] = useState([]);
+    const [isSeedModalOpen, setIsSeedModalOpen] = useState(false);
 
-    // --- NEW: Full list of all possible emotions ---
+    const todaysReflections = allEntries.filter(entry => {
+        const entryDate = new Date(entry.id).toDateString();
+        const todayDate = new Date().toDateString();
+        return entryDate === todayDate;
+    });
+
     const allEmotionChips = React.useMemo(() => [
         { text: 'Angry', description: 'Feeling or showing strong annoyance, displeasure, or hostility.', animationData: angryAnimation },
-        { text: 'Anxious', description: 'Feeling worry, nervousness, or unease about an imminent event or something with an uncertain outcome.', animationData: anxiousAnimation },
+        { text: 'Anxious', description: 'Feeling worry, nervousness, or unease.', animationData: anxiousAnimation },
         { text: 'Confused', description: 'Unable to think clearly or to understand something.', animationData: confusedAnimation },
         { text: 'Happy', description: 'Feeling or showing pleasure or contentment.', animationData: happyAnimation },
         { text: 'Hopeful', description: 'Feeling or inspiring optimism about a future event.', animationData: hopefulAnimation },
-        { text: 'Inspired', description: 'Feeling mentally stimulated to do or feel something, especially to do something creative.', animationData: inspiredAnimation },
+        { text: 'Inspired', description: 'Feeling mentally stimulated to do or feel something creative.', animationData: inspiredAnimation },
         { text: 'Joyful', description: 'Feeling, expressing, or causing great pleasure and happiness.', animationData: joyfulAnimation },
         { text: 'Loved', description: 'Feeling deeply cared for and cherished.', animationData: lovedAnimation },
-        { text: 'Overwhelmed', description: 'Feeling buried by stress or emotion, making it difficult to think or function.', animationData: overwhelmedAnimation },
-        { text: 'Peaceful', description: 'A state of peace, tranquility, and freedom from agitation or disturbance.', animationData: peacefulAnimation },
-        { text: 'Relieved', description: 'Feeling reassurance and relaxation following release from anxiety or distress.', animationData: relievedAnimation },
+        { text: 'Overwhelmed', description: 'Feeling buried by stress or emotion.', animationData: overwhelmedAnimation },
+        { text: 'Peaceful', description: 'A state of peace, tranquility, and freedom from disturbance.', animationData: peacefulAnimation },
+        { text: 'Relieved', description: 'Feeling reassurance and relaxation after release from anxiety.', animationData: relievedAnimation },
         { text: 'Sad', description: 'Feeling or showing sorrow; unhappy.', animationData: sadAnimation },
         { text: 'Smile', description: 'A pleased, kind, or amused facial expression.', animationData: smileAnimation },
         { text: 'Surprised', description: 'Feeling mild astonishment or shock.', animationData: surprisedAnimation },
         { text: 'Worried', description: 'Feeling anxious or troubled about actual or potential problems.', animationData: worriedAnimation }
     ], []);
 
-    // --- NEW: useEffect to select 4 random chips on component mount ---
     useEffect(() => {
         const shuffled = [...allEmotionChips].sort(() => 0.5 - Math.random());
         setRandomChips(shuffled.slice(0, 4));
@@ -251,6 +346,12 @@ const HomeView = ({ user, onFocusSelect, isLoading, recentEntries, onInsightSele
 
     return (
         <>
+            <LoadingWisdomModal isOpen={isLoading} message={loadingMessage} />
+            <ExplanationModal
+                isOpen={isSeedModalOpen}
+                onClose={() => setIsSeedModalOpen(false)}
+                explanation={seedOfTheDay?.explanation || "This wisdom was selected to provide a moment of peace and reflection as you begin your journey today."}
+            />
             <Tooltip text={tooltip.text} x={tooltip.x} y={tooltip.y} visible={tooltip.visible} />
             <motion.div
                 className="w-full max-w-2xl mx-auto p-6 md:p-8 flex-grow space-y-8"
@@ -307,11 +408,11 @@ const HomeView = ({ user, onFocusSelect, isLoading, recentEntries, onInsightSele
                             <motion.button
                                 type="submit"
                                 disabled={!mood.trim() || isLoading}
-                                className="absolute right-3 top-3 p-2 bg-emerald-500 text-white rounded-full hover:bg-emerald-600 disabled:bg-emerald-300 transition-all"
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.9 }}
+                                className="absolute right-3 top-3 p-2 bg-emerald-500 text-white rounded-full hover:bg-emerald-600 disabled:bg-emerald-300 disabled:cursor-not-allowed transition-all"
+                                whileHover={{ scale: isLoading ? 1 : 1.1 }}
+                                whileTap={{ scale: isLoading ? 1 : 0.95 }}
                             >
-                                {isLoading ? <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <Send size={20} />}
+                                <Send size={20} />
                             </motion.button>
                         </div>
                     </form>
@@ -330,35 +431,52 @@ const HomeView = ({ user, onFocusSelect, isLoading, recentEntries, onInsightSele
                 </motion.div>
 
                 {/* Seed of the Day */}
-                <motion.div variants={itemVariants} className="glass-card-flat p-6">
-                    <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-2">A thought for your journey…</h3>
-                    <blockquote className="text-gray-700 dark:text-gray-200 italic">
-                        "The quieter you become, the more you are able to hear."
-                        <footer className="mt-2 text-xs text-gray-500 not-italic">— Ram Dass</footer>
-                    </blockquote>
-                </motion.div>
+                <motion.div variants={itemVariants} className="glass-card-flat p-6 min-h-[120px] flex flex-col">
+                    <div className="flex justify-between items-start mb-2">
+                        <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400">A thought for your journey…</h3>
+                        <button
+                            onClick={onRefreshSeed}
+                            disabled={isLoadingSeed}
+                            className="p-1 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Get a new thought"
+                        >
+                            <RefreshCw size={16} className={isLoadingSeed ? 'animate-spin' : ''} />
+                        </button>
+                    </div>
 
-                {/* Recent Reflections Carousel */}
-                <motion.div variants={itemVariants}>
-                    <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Recent Reflections</h3>
-                    <div className="flex gap-4 overflow-x-auto pb-4 -mx-6 px-6">
-                        {recentEntries.length > 0 ? recentEntries.map((entry, i) => (
-                            <motion.div
-                                key={entry.id}
-                                className="flex-shrink-0 w-64 bg-white/50 dark:bg-gray-800/40 backdrop-blur-lg rounded-xl p-4 shadow-md cursor-pointer hover:shadow-xl transition-shadow"
-                                onClick={() => onInsightSelect(entry)}
-                                initial={{ opacity: 0, x: 50 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: i * 0.1 }}
-                            >
-                                <p className="text-xs text-gray-500 dark:text-gray-400">{new Date(entry.id).toLocaleDateString()}</p>
-                                <p className="font-semibold text-gray-700 dark:text-gray-200 mt-1 truncate">"{entry.insight.quote}"</p>
-                                <p className="text-xs bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full inline-block mt-3 capitalize">{entry.focus}</p>
-                            </motion.div>
-                        )) : (
-                            <p className="text-gray-500 dark:text-gray-400">Your recent insights will appear here.</p>
+                    <div className="flex-grow flex flex-col justify-between">
+                        {isLoadingSeed ? (
+                            <div className="space-y-3 animate-pulse">
+                                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
+                                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
+                            </div>
+                        ) : (
+                            seedOfTheDay && (
+                                <>
+                                    <div>
+                                        <blockquote className="text-gray-700 dark:text-gray-200 italic">
+                                            "{seedOfTheDay.quote}"
+                                            <footer className="mt-2 text-xs text-gray-500 not-italic">— {seedOfTheDay.source}</footer>
+                                        </blockquote>
+                                    </div>
+                                    <button
+                                        onClick={() => setIsSeedModalOpen(true)}
+                                        className="flex items-center self-end text-xs text-emerald-600 dark:text-emerald-400 hover:underline mt-2"
+                                    >
+                                        <HelpCircle size={14} className="mr-1" />
+                                        <span>Why this thought?</span>
+                                    </button>
+                                </>
+                            )
                         )}
                     </div>
+                </motion.div>
+
+
+                {/* Today's Poetic Diary */}
+                 <motion.div variants={itemVariants}>
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Today's Poetic Diary</h3>
+                    <TodaysReflections reflections={todaysReflections} onInsightSelect={onInsightSelect} />
                 </motion.div>
             </motion.div>
         </>
@@ -388,27 +506,85 @@ const Section = ({ title, icon, text, onTranslate, translation, isLoading }) => 
     );
 };
 
+
+// [*** NEW FEATURE ***]
+// This new modal component will display the explanation for the quote.
+const ExplanationModal = ({ explanation, onClose, isOpen }) => (
+    <AnimatePresence>
+        {isOpen && (
+            <motion.div
+                onClick={onClose}
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+            >
+                <motion.div
+                    onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside the modal
+                    className="w-full max-w-md bg-white/80 dark:bg-gray-800/80 rounded-2xl shadow-2xl p-8 text-center relative"
+                    initial={{ scale: 0.9, y: 20, opacity: 0 }}
+                    animate={{ scale: 1, y: 0, opacity: 1 }}
+                    exit={{ scale: 0.9, y: 20, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                >
+                    <h3 className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-4">Why this quote today?</h3>
+                    <p className="text-gray-600 dark:text-gray-300 italic">
+                        {explanation}
+                    </p>
+                    <button onClick={onClose} className="absolute top-2 right-2 p-2 text-gray-400 hover:bg-gray-500/10 rounded-full">
+                        <Feather name="x" size={18} />
+                    </button>
+                </motion.div>
+            </motion.div>
+        )}
+    </AnimatePresence>
+);
+
+
 const InsightCard = ({ insightData, journalText, setJournalText, onSaveJournal, isSavingJournal, onExit, onToggleFavorite, setIsEditingReflection, onTranslate, translations, isLoadingTranslation }) => {
     const { id, insight, reflection, isFavorite } = insightData;
+    // [*** NEW FEATURE ***]
+    // State to manage the visibility of the explanation modal.
+    const [isExplanationVisible, setIsExplanationVisible] = useState(false);
+
     return (
-        <motion.div
-            className="w-full max-w-2xl mx-auto p-6 md:p-8 flex-grow"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-        >
-            <div className="glass-card w-full relative">
-                <div className="absolute top-2 right-2 flex items-center space-x-1">
-                    <button onClick={() => onToggleFavorite(id, !isFavorite)} className={`p-2 rounded-full transition-colors ${isFavorite ? 'text-yellow-500 bg-yellow-500/20' : 'text-gray-400 hover:bg-gray-500/10'}`} title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}> <Star size={18} fill={isFavorite ? 'currentColor' : 'none'} /> </button>
-                    <button onClick={onExit} className="p-2 text-gray-400 hover:bg-gray-500/10 rounded-full" title="New Insight"><Feather name="x" size={18} /></button>
+        <>
+            {/* [*** NEW FEATURE ***] Render the new modal component. */}
+            <ExplanationModal
+                isOpen={isExplanationVisible}
+                onClose={() => setIsExplanationVisible(false)}
+                explanation={insight.explanation}
+            />
+            <motion.div
+                className="w-full max-w-2xl mx-auto p-6 md:p-8 flex-grow"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+            >
+                <div className="glass-card w-full relative">
+                    <div className="absolute top-2 right-2 flex items-center space-x-1">
+                        <button onClick={() => onToggleFavorite(id, !isFavorite)} className={`p-2 rounded-full transition-colors ${isFavorite ? 'text-yellow-500 bg-yellow-500/20' : 'text-gray-400 hover:bg-gray-500/10'}`} title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}> <Star size={18} fill={isFavorite ? 'currentColor' : 'none'} /> </button>
+                        <button onClick={onExit} className="p-2 text-gray-400 hover:bg-gray-500/10 rounded-full" title="New Insight"><Feather name="x" size={18} /></button>
+                    </div>
+                    {/* [*** NEW FEATURE ***] This whole div is now a button to open the explanation. */}
+                    <div
+                        className="mb-6 border-b pb-6 border-gray-200 dark:border-gray-700 cursor-pointer group"
+                        onClick={() => setIsExplanationVisible(true)}
+                    >
+                        <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">{insight.source}</p>
+                        <blockquote className="text-xl text-gray-800 dark:text-white font-serif mt-2">"{insight.quote}"</blockquote>
+                        <div className="flex items-center justify-end text-xs text-emerald-600 dark:text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity mt-2">
+                            <HelpCircle size={14} className="mr-1" />
+                            <span>Why this quote?</span>
+                        </div>
+                    </div>
+                    <Section title="Modern Analogy" icon={Sparkles} text={insight.analogy} onTranslate={() => onTranslate('analogy', insight.analogy)} translation={translations.analogy} isLoading={isLoadingTranslation.analogy} />
+                    <Section title="Timeless Root" icon={Anchor} text={insight.root} onTranslate={() => onTranslate('root', insight.root)} translation={translations.root} isLoading={isLoadingTranslation.root} />
+                    <Section title="Daily Practice" icon={Zap} text={insight.practice} onTranslate={() => onTranslate('practice', insight.practice)} translation={translations.practice} isLoading={isLoadingTranslation.practice} />
+                    <div className="mt-auto pt-8 border-t border-gray-200 dark:border-gray-700"><h3 className="flex items-center text-lg font-bold text-gray-700 dark:text-gray-200 mb-4"><Edit3 size={20} className="mr-3 text-gray-400" /> My Reflection</h3>{reflection ? (<div className="flex justify-between items-start"><p className="p-4 bg-gray-500/10 rounded-lg text-gray-700 dark:text-gray-200 whitespace-pre-wrap flex-1">{reflection}</p><button onClick={() => setIsEditingReflection(true)} className="p-2 ml-2 text-gray-400 hover:text-gray-600 dark:hover:text-white"><Feather size={16} name="edit-2" /></button></div>) : (<><textarea value={journalText} onChange={(e) => setJournalText(e.target.value)} className="w-full p-3 bg-gray-100/50 dark:bg-gray-800/50 rounded-lg border-2 border-transparent focus:bg-white dark:focus:bg-gray-800 focus:border-emerald-500 dark:text-white" placeholder="One thought on this..." rows={3} /><button onClick={onSaveJournal} disabled={isSavingJournal || !journalText} className="mt-3 w-full md:w-auto px-5 py-2 bg-emerald-600 text-white rounded-md flex items-center justify-center font-semibold hover:bg-emerald-700 transition-all disabled:bg-emerald-300">{isSavingJournal ? (<div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin mr-2"></div>) : (<CheckCircle size={16} className="mr-2" />)}Save Reflection</button></>)}</div>
                 </div>
-                <div className="mb-6 border-b pb-6 border-gray-200 dark:border-gray-700"><p className="text-gray-500 dark:text-gray-400 text-sm font-medium">{insight.source}</p><blockquote className="text-xl text-gray-800 dark:text-white font-serif mt-2">"{insight.quote}"</blockquote></div>
-                <Section title="Modern Analogy" icon={Sparkles} text={insight.analogy} onTranslate={() => onTranslate('analogy', insight.analogy)} translation={translations.analogy} isLoading={isLoadingTranslation.analogy} />
-                <Section title="Timeless Root" icon={Anchor} text={insight.root} onTranslate={() => onTranslate('root', insight.root)} translation={translations.root} isLoading={isLoadingTranslation.root} />
-                <Section title="Daily Practice" icon={Zap} text={insight.practice} onTranslate={() => onTranslate('practice', insight.practice)} translation={translations.practice} isLoading={isLoadingTranslation.practice} />
-                <div className="mt-auto pt-8 border-t border-gray-200 dark:border-gray-700"><h3 className="flex items-center text-lg font-bold text-gray-700 dark:text-gray-200 mb-4"><Edit3 size={20} className="mr-3 text-gray-400" /> My Reflection</h3>{reflection ? (<div className="flex justify-between items-start"><p className="p-4 bg-gray-500/10 rounded-lg text-gray-700 dark:text-gray-200 whitespace-pre-wrap flex-1">{reflection}</p><button onClick={() => setIsEditingReflection(true)} className="p-2 ml-2 text-gray-400 hover:text-gray-600 dark:hover:text-white"><Feather size={16} name="edit-2" /></button></div>) : (<><textarea value={journalText} onChange={(e) => setJournalText(e.target.value)} className="w-full p-3 bg-gray-100/50 dark:bg-gray-800/50 rounded-lg border-2 border-transparent focus:bg-white dark:focus:bg-gray-800 focus:border-emerald-500 dark:text-white" placeholder="One thought on this..." rows={3} /><button onClick={onSaveJournal} disabled={isSavingJournal || !journalText} className="mt-3 w-full md:w-auto px-5 py-2 bg-emerald-600 text-white rounded-md flex items-center justify-center font-semibold hover:bg-emerald-700 transition-all disabled:bg-emerald-300">{isSavingJournal ? (<div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin mr-2"></div>) : (<CheckCircle size={16} className="mr-2" />)}Save Reflection</button></>)}</div>
-            </div>
-        </motion.div>
+            </motion.div>
+        </>
     );
 };
 
@@ -598,7 +774,6 @@ const NavBar = ({ activeTab, setActiveTab }) => {
     );
 };
 
-// --- MODIFICATION: Updated MessageModal to handle different types ---
 const MessageModal = ({ isOpen, title, message, type, onConfirm, onClose }) => {
     return (
         <AnimatePresence>
@@ -661,6 +836,16 @@ const MessageModal = ({ isOpen, title, message, type, onConfirm, onClose }) => {
     );
 };
 
+const loadingMessages = [
+    "Sowing a seed of insight...",
+    "Brewing a bit of wisdom for you...",
+    "Translating timeless knowledge...",
+    "Connecting with ancient thought...",
+    "Letting the reflection simmer...",
+    "Gathering words for your journey...",
+    "Finding the right words... breathe with us 🌬️",
+    "A moment of stillness before clarity...",
+];
 
 // --- MAIN APP COMPONENT ---
 export default function App() {
@@ -671,7 +856,8 @@ export default function App() {
     const [learningSummary, setLearningSummary] = useState(null);
     const [journalText, setJournalText] = useState('');
     const [isEditingReflection, setIsEditingReflection] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
+    const [loadingMessage, setLoadingMessage] = useState(loadingMessages[0]);
     const [isAuthReady, setIsAuthReady] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [user, setUser] = useState(null);
@@ -681,10 +867,12 @@ export default function App() {
     const [isLoadingTranslation, setIsLoadingTranslation] = useState({});
     const [authError, setAuthError] = useState(null);
 
-    // --- MODIFICATION: State for the modal ---
     const [modalContent, setModalContent] = useState({ isOpen: false, title: '', message: null, type: 'rejection' });
     const [greyAreaInput, setGreyAreaInput] = useState(null);
-    const [setShowCustomInput] = useState(false);
+    const [showCustomInput, setShowCustomInput] = useState(false);
+    
+    const [seedOfTheDay, setSeedOfTheDay] = useState(null);
+    const [isLoadingSeed, setIsLoadingSeed] = useState(true);
 
 
     // Firebase Auth State Listener
@@ -692,7 +880,6 @@ export default function App() {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             setUser(user);
             setIsAuthReady(true);
-            setIsLoading(false);
         });
         return () => unsubscribe(); // Cleanup subscription on unmount
     }, []);
@@ -726,10 +913,8 @@ export default function App() {
         }
     }, []);
 
-    // --- MODIFICATION: Updated prompt function for more nuanced validation ---
    const getValidationPrompt = (userInput) => {
       const prompt = `You are a sophisticated AI gatekeeper for a mindfulness app. Your purpose is to analyze the user's input and determine its core intent based on a set of principles.
-
 **Principles:**
 1.  **Identify the Core Subject:** Is the user talking about an *internal state* (a feeling, a mood, a doubt) or an *external object/task* (a resume, a person, a technical problem)?
 2.  **Determine the Goal:** Is the user's goal *self-reflection* (understanding a feeling) or *problem-solving* (getting information or a result)?
@@ -767,21 +952,87 @@ Input: "${userInput}"`;
       };
   };
 
-  // Prompt generation for Gemini API
-  const getInsightPrompt = (currentFocus, summary, repetitionContext, recentSources) => {
-      let context = summary ? `To personalize this, draw from the user's learning journey summary: "${summary}". Weave in their specific actions or metaphors to make the insight deeply resonant.` : '';
-      if (repetitionContext) { context += `\n${repetitionContext}`; }
+    const getInsightPrompt = (currentFocus, summary, repetitionContext, recentSources) => {
+        let context = summary ? `To personalize this, draw from the user's learning journey summary: "${summary}". Weave in their specific actions or metaphors to make the insight deeply resonant.` : '';
+        if (repetitionContext) { context += `\n${repetitionContext}`; }
 
-      const shuffledSources = [...wisdomSources].sort(() => 0.5 - Math.random());
-      const availableSources = shuffledSources.filter(source => !recentSources.includes(source)).slice(0, 5);
+        const shuffledSources = [...wisdomSources].sort(() => 0.5 - Math.random());
+        const availableSources = shuffledSources.filter(source => !recentSources.includes(source)).slice(0, 5);
 
-      let sourceConstraint = availableSources.length > 0 ? `Draw inspiration from any profound wisdom tradition or literary work, explicitly favoring but not limited to these sources for variety: ${availableSources.join(', ')}.` : 'Draw inspiration from any profound wisdom tradition or literary work.';
+        let sourceConstraint = availableSources.length > 0 ? `Draw inspiration from any profound wisdom tradition or literary work, explicitly favoring but not limited to these sources for variety: ${availableSources.join(', ')}.` : 'Draw inspiration from any profound wisdom tradition or literary work.';
 
-      const prompt = `Act as a wise, modern 'wisdom translator' for someone whose mind is on: '${currentFocus}'. ${context} CRITICAL INSTRUCTION: Your task is to generate a *unique* short phrase, paragraph, essay excerpt, shloka (with its source), or quote. Ensure the entire insight, especially the content and source, is distinct from any previous insights. ${sourceConstraint} Build a resonant daily message around it. Structure your response in a JSON format with five keys: "quote" (which will contain the phrase, paragraph, shloka, or quote), "source", "analogy", "root", and "practice".`;
-      return { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", responseSchema: { type: "OBJECT", properties: { "quote": { "type": "STRING" }, "source": { "type": "STRING" }, "analogy": { "type": "STRING" }, "root": { "type": "STRING" }, "practice": { "type": "STRING" }, }, required: ["quote", "source", "analogy", "root", "practice"] } } };
-  };
+        const prompt = `Act as a wise, modern 'wisdom translator' for someone whose mind is on: '${currentFocus}'. ${context} CRITICAL INSTRUCTION: Your task is to generate a *unique* short phrase, paragraph, shloka, or quote. Ensure it is distinct from any previous insights. ${sourceConstraint} Build a resonant daily message around it. Structure your response in a JSON format with SIX keys: "quote", "source", "analogy", "root", "practice", and "explanation". The "explanation" should be a short (1-3 sentences), warm, poetic, and reflective answer to the question "Why this quote today?", directly connecting the quote's meaning to the user's feeling of '${currentFocus}' without repeating the quote itself.`;
+        return { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", responseSchema: { type: "OBJECT", properties: { "quote": { "type": "STRING" }, "source": { "type": "STRING" }, "analogy": { "type": "STRING" }, "root": { "type": "STRING" }, "practice": { "type": "STRING" }, "explanation": { "type": "STRING" } }, required: ["quote", "source", "analogy", "root", "practice", "explanation"] } } };
+    };
 
-    // --- MODIFICATION: Added generateAndSaveSummary back ---
+    const getSeedOfTheDayPrompt = (recentReflectionsSummary, recentQuotes) => {
+        let context = "The user has no recent reflections. Provide a piece of general, uplifting, and timeless wisdom suitable for anyone starting their day.";
+        if (recentReflectionsSummary) {
+            context = `Based on the user's recent reflections summarized as: "${recentReflectionsSummary}", generate a new, suitable quote that resonates with these themes.`;
+        }
+
+        const prompt = `You are a source of daily wisdom. Your task is to provide a single, resonant "thought for the day".
+${context}
+The quote should be from a recognized sage, philosopher, poet, or literary work.
+CRITICAL: Do not use any of the following quotes: ${JSON.stringify(recentQuotes)}.
+Your response must be a JSON object with three keys: "quote", "source", and "explanation".
+The "explanation" should be a short (1-2 sentences), gentle, and poetic message explaining why this thought might be helpful for the user today, based on the provided context.`;
+
+        return {
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: "OBJECT",
+                    properties: {
+                        "quote": { "type": "STRING" },
+                        "source": { "type": "STRING" },
+                        "explanation": { "type": "STRING" }
+                    },
+                    required: ["quote", "source", "explanation"]
+                }
+            }
+        };
+    };
+
+    const fetchOrGenerateSeedOfTheDay = useCallback(async (entries, forceRefresh = false) => {
+        setIsLoadingSeed(true);
+        const today = new Date().toDateString();
+        try {
+            if (!forceRefresh) {
+                const storedSeedData = JSON.parse(localStorage.getItem('mindfulSeed_dailySeed'));
+                if (storedSeedData && storedSeedData.date === today) {
+                    setSeedOfTheDay(storedSeedData.seed);
+                    setIsLoadingSeed(false);
+                    return;
+                }
+            }
+
+            const recentReflectionsSummary = entries.slice(0, 5)
+                .map(e => `Felt "${e.focus}" and reflected: "${e.reflection || 'No written reflection.'}"`)
+                .join('; ');
+
+            const recentQuotes = entries.slice(0, 10).map(e => e.insight.quote);
+            const payload = getSeedOfTheDayPrompt(recentReflectionsSummary, recentQuotes);
+            const resultText = await callGeminiAPI(payload);
+            const newSeed = JSON.parse(resultText);
+
+            if (newSeed && newSeed.quote) {
+                setSeedOfTheDay(newSeed);
+                localStorage.setItem('mindfulSeed_dailySeed', JSON.stringify({ seed: newSeed, date: today }));
+            }
+        } catch (error) {
+            console.error("Failed to generate seed of the day:", error);
+            setSeedOfTheDay({
+                quote: "The quieter you become, the more you are able to hear.",
+                source: "Ram Dass",
+                explanation: "In moments of uncertainty, turning inward can provide the clarity we seek. This thought is offered to encourage a pause and a gentle listening to your own inner wisdom."
+            });
+        } finally {
+            setIsLoadingSeed(false);
+        }
+    }, [callGeminiAPI]);
+
     const generateAndSaveSummary = useCallback(async (entries, userDocRef) => {
         const recentReflections = entries.slice(0, 5).filter(e => e.reflection).map(e => `- ${e.reflection}`).join("\n");
         if (!recentReflections) return null;
@@ -813,12 +1064,11 @@ Input: "${userInput}"`;
 
         const payload = getInsightPrompt(focus, learningSummary, repetitionContext, recentSources);
         const resultText = await callGeminiAPI(payload);
-        // --- ERROR FIX: Add a check before parsing JSON ---
         if (!resultText || typeof resultText !== 'string') {
             throw new Error("API returned an invalid or empty insight response.");
         }
         const newInsight = JSON.parse(resultText);
-        const iconList = ['🌱', '�', '🌸', '💧', '☀️', '⛰️', '⭐', '💎', '🧭', '🕊️'];
+        const iconList = ['🌱', '', '🌸', '💧', '☀️', '⛰️', '⭐', '💎', '', '🕊️'];
         newInsight.icon = iconList[Math.floor(Math.random() * iconList.length)];
         const insightId = new Date().toISOString();
         const insightData = { id: insightId, insight: newInsight, focus: focus, reflection: '', isFavorite: false };
@@ -828,10 +1078,12 @@ Input: "${userInput}"`;
         setCurrentView('insight');
     }, [user, archiveEntries, learningSummary, callGeminiAPI]);
 
-    // --- MODIFICATION: Updated fetchNewInsight with smarter validation ---
     const fetchNewInsight = useCallback(async (currentFocus) => {
         if (!db || !user) return;
+        
         setIsLoading(true);
+        setLoadingMessage(loadingMessages[Math.floor(Math.random() * loadingMessages.length)]);
+        
         setTranslations({});
         setModalContent({ isOpen: false, title: '', message: null, type: 'rejection' });
 
@@ -852,10 +1104,8 @@ Input: "${userInput}"`;
         }
 
         try {
-            // Step 1: Validate input using Gemini
             const validationPayload = getValidationPrompt(trimmedFocus);
             const validationJson = await callGeminiAPI(validationPayload);
-            // --- ERROR FIX: Add a check before parsing JSON ---
             if (!validationJson || typeof validationJson !== 'string') {
                 throw new Error("API returned an invalid or empty validation response.");
             }
@@ -907,6 +1157,7 @@ Input: "${userInput}"`;
         setModalContent({ isOpen: false });
         if (greyAreaInput) {
             setIsLoading(true);
+            setLoadingMessage(loadingMessages[Math.floor(Math.random() * loadingMessages.length)]);
             generateInsight(greyAreaInput).finally(() => {
                 setIsLoading(false);
                 setGreyAreaInput(null);
@@ -931,10 +1182,11 @@ Input: "${userInput}"`;
                 const archiveSnapshot = await getDocs(archiveQuery);
                 const allEntries = archiveSnapshot.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(b.id) - new Date(a.id));
                 setArchiveEntries(allEntries);
+                await fetchOrGenerateSeedOfTheDay(allEntries, false);
             }
             loadData();
         }
-    }, [isAuthReady, user]);
+    }, [isAuthReady, user, fetchOrGenerateSeedOfTheDay]);
 
     // Handle saving journal reflection
     const handleSaveJournal = async () => {
@@ -1022,6 +1274,7 @@ Input: "${userInput}"`;
                 await firestoreDeleteDoc(docSnap.ref);
             }
             await firestoreDeleteDoc(userDocRef);
+            localStorage.removeItem('mindfulSeed_dailySeed');
             await deleteUser(user);
         } catch (error) {
             console.error("Error deleting account:", error);
@@ -1032,7 +1285,12 @@ Input: "${userInput}"`;
     // Navigation handlers
     const handleExitInsight = () => { setCurrentInsightData(null); setCurrentView('onboarding'); setShowCustomInput(false); };
     const handleSignIn = () => { if (!auth) return; const provider = new GoogleAuthProvider(); signInWithPopup(auth, provider).catch(error => { console.error("Sign-in error", error); setAuthError(`Could not sign in. Ensure your domain is authorized in Firebase settings. (${error.code})`); }); };
-    const handleSignOut = () => { if (auth) signOut(auth); };
+    const handleSignOut = () => { 
+        if (auth) {
+            signOut(auth); 
+            localStorage.removeItem('mindfulSeed_dailySeed');
+        }
+    };
 
     // Show loading spinner while authentication is being checked
     if (!isAuthReady) {
@@ -1093,11 +1351,15 @@ Input: "${userInput}"`;
                     user={user}
                     onFocusSelect={fetchNewInsight}
                     isLoading={isLoading}
-                    recentEntries={archiveEntries.slice(0, 3)}
+                    loadingMessage={loadingMessage}
+                    allEntries={archiveEntries}
                     onInsightSelect={(entry) => {
                         setCurrentInsightData(entry);
                         setCurrentView('insight');
                     }}
+                    seedOfTheDay={seedOfTheDay}
+                    isLoadingSeed={isLoadingSeed}
+                    onRefreshSeed={() => fetchOrGenerateSeedOfTheDay(archiveEntries, true)}
                 />;
             case 'log': return <DailyLogView entries={archiveEntries} onToggleFavorite={handleToggleFavorite} />;
             case 'favorites': return <FavoritesView entries={archiveEntries} onToggleFavorite={handleToggleFavorite} />;
